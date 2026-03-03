@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  achadinhos-shopee:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: achadinhos-shopee
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - OPERATION_MODE=${OPERATION_MODE:-once}
+    volumes:
+      # Monta código para desenvolvimento (remover em produção)
+      - ./app:/app/app
+      # Persiste logs
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - achadinhos-network
+
+  # Opcional: adicionar banco de dados para persistência
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: achadinhos-db
+  #   environment:
+  #     POSTGRES_DB: achadinhos
+  #     POSTGRES_USER: ${DB_USER:-achadinhos}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   networks:
+  #     - achadinhos-network
+  #   restart: unless-stopped
+
+  # Opcional: adicionar Redis para cache
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: achadinhos-cache
+  #   networks:
+  #     - achadinhos-network
+  #   restart: unless-stopped
+
+networks:
+  achadinhos-network:
+    driver: bridge
+
+# volumes:
+#   postgres-data:
