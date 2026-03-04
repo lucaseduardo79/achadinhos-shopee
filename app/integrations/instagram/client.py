@@ -48,13 +48,13 @@ class InstagramClient:
         try:
             # Passo 1: Criar container de mídia
             create_endpoint = f"{self.base_url}/{self.instagram_account_id}/media"
-            create_params = {
+            create_data = {
                 **self._get_params(),
                 "image_url": image_url,
                 "caption": caption
             }
 
-            create_response = requests.post(create_endpoint, params=create_params)
+            create_response = requests.post(create_endpoint, data=create_data)
             create_response.raise_for_status()
             container_id = create_response.json().get("id")
 
@@ -62,12 +62,12 @@ class InstagramClient:
 
             # Passo 2: Publicar o container
             publish_endpoint = f"{self.base_url}/{self.instagram_account_id}/media_publish"
-            publish_params = {
+            publish_data = {
                 **self._get_params(),
                 "creation_id": container_id
             }
 
-            publish_response = requests.post(publish_endpoint, params=publish_params)
+            publish_response = requests.post(publish_endpoint, data=publish_data)
             publish_response.raise_for_status()
             post_id = publish_response.json().get("id")
 
@@ -137,12 +137,12 @@ class InstagramClient:
 
         try:
             endpoint = f"{self.base_url}/{comment_id}/replies"
-            params = {
+            reply_data = {
                 **self._get_params(),
                 "message": message
             }
 
-            response = requests.post(endpoint, params=params)
+            response = requests.post(endpoint, data=reply_data)
             response.raise_for_status()
 
             reply_id = response.json().get("id")
@@ -176,11 +176,11 @@ class InstagramClient:
             endpoint = f"{self.base_url}/me/messages"
             payload = {
                 "recipient": {"id": user_id},
-                "message": {"text": message}
+                "message": {"text": message},
+                "access_token": self.access_token
             }
-            params = self._get_params()
 
-            response = requests.post(endpoint, params=params, json=payload)
+            response = requests.post(endpoint, json=payload)
             response.raise_for_status()
 
             message_id = response.json().get("message_id")
