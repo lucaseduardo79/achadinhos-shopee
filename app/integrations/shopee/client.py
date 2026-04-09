@@ -151,7 +151,7 @@ class ShopeeClient:
         self,
         limit: int = 50,
         keyword: str = "",
-        list_type: int = 1,
+        list_type: int = 0,
         sort_type: int = 5,
         page: int = 1
     ) -> List[Dict[str, Any]]:

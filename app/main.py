@@ -6,8 +6,9 @@ import time
 import logging
 from dotenv import load_dotenv
 from app.utils.logger import setup_logging
-from app.graph.graph import run_workflow
-from app.graph.state import create_initial_state
+from app.graph.graph import run_workflow, run_monitor_workflow
+from app.graph.state import create_initial_state, GraphState
+from app.services.state_store import load_last_post
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,11 @@ def main():
         interval = int(os.getenv("LOOP_INTERVAL_SECONDS", "3600"))
         run_continuous_loop(interval)
 
+    elif mode == "monitor":
+        # Monitora comentários do último post publicado sem publicar um novo
+        logger.info("Modo: Monitoramento")
+        run_monitor_execution()
+
     elif mode == "scheduled":
         # Execução agendada (requer biblioteca de scheduling)
         logger.info("Modo: Agendado")
@@ -69,6 +75,37 @@ def run_single_execution():
     except Exception as e:
         logger.exception(f"Erro fatal durante execução: {str(e)}")
         exit(1)
+
+
+def run_monitor_execution():
+    """Monitora comentários do último post publicado sem publicar um novo."""
+    last = load_last_post()
+    if not last:
+        logger.error("Nenhum post salvo encontrado. Execute no modo 'once' primeiro.")
+        exit(1)
+
+    post_id = last["post_id"]
+    offer = last["offer"]
+    logger.info(f"Monitorando post {post_id} — {offer.get('name', '')}")
+
+    from datetime import datetime
+    initial_state = create_initial_state()
+    initial_state["current_offer"] = offer
+    initial_state["post_content"] = {
+        "post_id": post_id,
+        "image_url": offer.get("image_url", ""),
+        "caption": "",
+        "published_at": last.get("published_at"),
+        "product_link": offer.get("affiliate_link") or offer.get("product_url", ""),
+    }
+    initial_state["step"] = "post_published"
+
+    final_state = run_monitor_workflow(initial_state)
+
+    if final_state.get("error"):
+        logger.error(f"Monitoramento finalizado com erro: {final_state['error']}")
+    else:
+        logger.info("Monitoramento finalizado com sucesso!")
 
 
 def run_continuous_loop(interval_seconds: int):

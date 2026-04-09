@@ -2,12 +2,19 @@
 Cliente para integração com a API do Instagram (Meta Graph API).
 """
 import os
+import re
 import logging
+from pathlib import Path
 from typing import List, Dict, Any
 import requests
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+ENV_FILE = Path(__file__).parent.parent.parent.parent / ".env"
+
+# Subcódigos de token expirado/inválido da Meta Graph API
+_TOKEN_EXPIRED_SUBCODES = {463, 467}
 
 
 class InstagramClient:
@@ -29,6 +36,101 @@ class InstagramClient:
     def _get_params(self) -> Dict[str, str]:
         """Retorna parâmetros base para requisições."""
         return {"access_token": self.access_token}
+
+    def _is_token_expired(self, response: requests.Response) -> bool:
+        """Verifica se a resposta indica token expirado ou inválido."""
+        try:
+            body = response.json()
+            error = body.get("error", {})
+            code = error.get("code")
+            subcode = error.get("error_subcode")
+            return code == 190 and subcode in _TOKEN_EXPIRED_SUBCODES
+        except Exception:
+            return False
+
+    def _refresh_token(self) -> bool:
+        """
+        Renova o token de longa duração via fb_exchange_token.
+        Atualiza self.access_token e o arquivo .env.
+
+        Returns:
+            True se renovado com sucesso, False caso contrário.
+        """
+        app_id = os.getenv("META_EXCHANGE_APP_ID")
+        app_secret = os.getenv("META_EXCHANGE_APP_SECRET")
+
+        if not all([app_id, app_secret]):
+            logger.error(
+                "META_EXCHANGE_APP_ID e META_EXCHANGE_APP_SECRET não configurados. "
+                "Não é possível renovar o token automaticamente."
+            )
+            return False
+
+        logger.info("Token expirado. Tentando renovação automática...")
+
+        try:
+            resp = requests.get(
+                f"https://graph.facebook.com/{self.api_version}/oauth/access_token",
+                params={
+                    "grant_type": "fb_exchange_token",
+                    "client_id": app_id,
+                    "client_secret": app_secret,
+                    "fb_exchange_token": self.access_token,
+                },
+                timeout=15,
+            )
+            data = resp.json()
+
+            if "error" in data:
+                logger.error(f"Falha ao renovar token: {data['error']['message']}")
+                return False
+
+            new_token = data["access_token"]
+            expires_days = data.get("expires_in", 0) // 86400
+
+            self.access_token = new_token
+            self._update_env_token(new_token)
+
+            logger.info(f"Token renovado com sucesso. Expira em ~{expires_days} dias.")
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro inesperado ao renovar token: {e}")
+            return False
+
+    def _update_env_token(self, new_token: str):
+        """Atualiza INSTAGRAM_ACCESS_TOKEN no arquivo .env."""
+        try:
+            content = ENV_FILE.read_text(encoding="utf-8")
+            updated = re.sub(
+                r"^(INSTAGRAM_ACCESS_TOKEN=).*$",
+                rf"\g<1>{new_token}",
+                content,
+                flags=re.MULTILINE,
+            )
+            ENV_FILE.write_text(updated, encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Não foi possível atualizar o .env: {e}")
+
+    def _request(self, method: str, url: str, **kwargs) -> requests.Response:
+        """
+        Executa uma requisição HTTP com detecção e renovação automática de token expirado.
+        Retenta a requisição uma vez após renovação bem-sucedida.
+        """
+        resp = getattr(requests, method)(url, **kwargs)
+
+        if self._is_token_expired(resp):
+            if self._refresh_token():
+                # Atualiza o token nos kwargs e retenta
+                if "params" in kwargs and "access_token" in kwargs["params"]:
+                    kwargs["params"]["access_token"] = self.access_token
+                if "data" in kwargs and "access_token" in kwargs["data"]:
+                    kwargs["data"]["access_token"] = self.access_token
+                resp = getattr(requests, method)(url, **kwargs)
+            else:
+                logger.error("Renovação do token falhou. Verifique as credenciais.")
+
+        return resp
 
     def publish_post(self, image_url: str, caption: str) -> str:
         """
@@ -54,7 +156,7 @@ class InstagramClient:
                 "caption": caption
             }
 
-            create_response = requests.post(create_endpoint, data=create_data)
+            create_response = self._request("post", create_endpoint, data=create_data)
             create_response.raise_for_status()
             container_id = create_response.json().get("id")
 
@@ -67,7 +169,7 @@ class InstagramClient:
                 "creation_id": container_id
             }
 
-            publish_response = requests.post(publish_endpoint, data=publish_data)
+            publish_response = self._request("post", publish_endpoint, data=publish_data)
             publish_response.raise_for_status()
             post_id = publish_response.json().get("id")
 
@@ -97,7 +199,7 @@ class InstagramClient:
                 "fields": "id,username,text,timestamp,from"
             }
 
-            response = requests.get(endpoint, params=params)
+            response = self._request("get", endpoint, params=params)
             response.raise_for_status()
 
             comments_data = response.json().get("data", [])
@@ -142,7 +244,7 @@ class InstagramClient:
                 "message": message
             }
 
-            response = requests.post(endpoint, data=reply_data)
+            response = self._request("post", endpoint, data=reply_data)
             response.raise_for_status()
 
             reply_id = response.json().get("id")
@@ -180,7 +282,7 @@ class InstagramClient:
                 "access_token": self.access_token
             }
 
-            response = requests.post(endpoint, json=payload)
+            response = self._request("post", endpoint, json=payload)
             response.raise_for_status()
 
             message_id = response.json().get("message_id")
@@ -211,7 +313,7 @@ class InstagramClient:
                 "fields": "id,username,followers_count,follows_count,media_count"
             }
 
-            response = requests.get(endpoint, params=params)
+            response = self._request("get", endpoint, params=params)
             response.raise_for_status()
 
             return response.json()

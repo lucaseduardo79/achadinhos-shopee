@@ -79,7 +79,7 @@ class OfferSelector:
         """Verifica se uma oferta atende aos critérios mínimos."""
 
         # Valida rating
-        rating = offer.get("ratingStar", 0)
+        rating = float(offer.get("ratingStar") or 0)
         if rating < self.min_rating:
             return False
 
@@ -89,7 +89,7 @@ class OfferSelector:
             return False
 
         # Valida comissão
-        commission = offer.get("commissionRate", 0)
+        commission = float(offer.get("commissionRate") or 0)
         if commission < self.min_commission:
             return False
 
@@ -141,17 +141,17 @@ class OfferSelector:
         return ProductOffer(
             product_id=str(raw_offer.get("itemId", "")),
             name=raw_offer.get("productName", "Produto sem nome"),
-            price=float(raw_offer.get("priceMin", 0)),
-            original_price=raw_offer.get("priceMax"),
+            price=float(raw_offer.get("priceMin") or 0),
+            original_price=float(raw_offer.get("priceMax") or 0) or None,
             discount_percentage=discount,
-            rating=raw_offer.get("ratingStar"),
+            rating=float(raw_offer.get("ratingStar") or 0),
             image_url=raw_offer.get("imageUrl", ""),
             product_url=raw_offer.get("offerLink", ""),
             affiliate_link=None,
-            commission=raw_offer.get("commissionRate"),
+            commission=float(raw_offer.get("commissionRate") or 0),
             category=None,
-            sales=raw_offer.get("sales"),
+            sales=int(raw_offer.get("sales") or 0),
             shop_name=raw_offer.get("shopName"),
             shop_type=raw_offer.get("shopType"),
-            commission_value=raw_offer.get("commission"),
+            commission_value=float(raw_offer.get("commission") or 0),
         )

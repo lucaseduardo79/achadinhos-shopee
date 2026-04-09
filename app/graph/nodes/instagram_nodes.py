@@ -7,6 +7,7 @@ from app.graph.state import GraphState
 from app.integrations.instagram.client import InstagramClient
 from app.services.content_generator import ContentGenerator
 from app.services.comment_processor import CommentProcessor
+from app.services.state_store import save_post, get_offer_for_post
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,11 @@ def publicar_post(state: GraphState) -> Dict[str, Any]:
         post_content["post_id"] = post_id
 
         logger.info(f"[{state['execution_id']}] Post publicado: {post_id}")
+
+        # Persiste o post e a oferta para monitoramento futuro
+        offer = state.get("current_offer")
+        if offer:
+            save_post(post_id, offer)
 
         return {
             "post_content": post_content,
@@ -200,6 +206,14 @@ def enviar_dm_com_link(state: GraphState) -> Dict[str, Any]:
             }
 
         client = InstagramClient()
+
+        # Se a oferta em memória não tem link, tenta carregar do estado persistido
+        post_id = (state.get("post_content") or {}).get("post_id")
+        if post_id and not (offer.get("affiliate_link") or offer.get("product_url")):
+            stored_offer = get_offer_for_post(post_id)
+            if stored_offer:
+                offer = stored_offer
+
         link = offer.get("affiliate_link") or offer.get("product_url", "")
         message = (
             f"Oi! 👋 Vi seu comentário e já te mandei o link do produto com desconto.\n\n"

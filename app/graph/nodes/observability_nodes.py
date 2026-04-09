@@ -28,8 +28,8 @@ def logar_evento(state: GraphState) -> Dict[str, Any]:
         "step": step,
         "timestamp": datetime.now().isoformat(),
         "error": error,
-        "offers_count": len(state.get("selected_offers", [])),
-        "comments_count": len(state.get("comments", []))
+        "offers_count": len(state.get("selected_offers") or []),
+        "comments_count": len(state.get("comments") or [])
     }
 
     if error:

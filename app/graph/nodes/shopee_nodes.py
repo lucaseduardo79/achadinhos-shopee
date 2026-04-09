@@ -67,7 +67,11 @@ def selecionar_ofertas_do_dia(state: GraphState) -> Dict[str, Any]:
     logger.info(f"[{state['execution_id']}] Selecionando ofertas...")
 
     try:
-        selector = OfferSelector()
+        selector = OfferSelector(
+            min_rating=float(os.getenv("MIN_RATING", 4.0)),
+            min_discount=float(os.getenv("MIN_DISCOUNT", 30.0)),
+            min_commission=float(os.getenv("MIN_COMMISSION", 5.0)),
+        )
         raw_offers = state.get("raw_offers", [])
 
         if not raw_offers:
@@ -85,7 +89,7 @@ def selecionar_ofertas_do_dia(state: GraphState) -> Dict[str, Any]:
             if offer.get("product_url"):
                 short_link = client.generate_short_link(
                     origin_url=offer["product_url"],
-                    sub_ids=["instagram", state.get("execution_id", "unknown")]
+                    sub_ids=["instagram"]
                 )
                 if short_link:
                     offer["affiliate_link"] = short_link

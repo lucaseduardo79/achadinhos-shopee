@@ -152,6 +152,50 @@ def build_graph() -> StateGraph:
     return app
 
 
+def build_monitor_graph() -> StateGraph:
+    """
+    Constrói um grafo apenas para monitoramento de comentários
+    de um post já publicado.
+    """
+    workflow = StateGraph(GraphState)
+
+    workflow.add_node("monitor_comments", monitorar_comentarios)
+    workflow.add_node("evaluate_comment", avaliar_comentario)
+    workflow.add_node("enviar_dm", enviar_dm_com_link)
+    workflow.add_node("responder_comentario", responder_comentario_publico)
+    workflow.add_node("log_event", logar_evento)
+    workflow.add_node("handle_error", handle_error)
+
+    workflow.set_entry_point("monitor_comments")
+    workflow.add_edge("monitor_comments", "evaluate_comment")
+
+    workflow.add_conditional_edges(
+        "evaluate_comment",
+        should_continue_monitoring,
+        {
+            "enviar_dm": "enviar_dm",
+            "end": "log_event",
+            "handle_error": "handle_error",
+            "monitor_comments": "monitor_comments"
+        }
+    )
+
+    workflow.add_edge("enviar_dm", "responder_comentario")
+    workflow.add_edge("responder_comentario", "evaluate_comment")
+    workflow.add_conditional_edges(
+        "handle_error",
+        should_retry,
+        {
+            "fetch_offers": "log_event",
+            "end": "log_event",
+            "log_event": "log_event"
+        }
+    )
+    workflow.add_edge("log_event", END)
+
+    return workflow.compile()
+
+
 def run_workflow(initial_state: GraphState = None):
     """
     Executa o workflow completo.
@@ -171,6 +215,27 @@ def run_workflow(initial_state: GraphState = None):
     final_state = app.invoke(initial_state)
 
     logger.info(f"Workflow {initial_state['execution_id']} finalizado")
+    logger.info(f"Status final: {final_state.get('step')}")
+
+    return final_state
+
+
+def run_monitor_workflow(initial_state: GraphState):
+    """
+    Executa apenas o monitoramento de comentários de um post já publicado.
+
+    Args:
+        initial_state: Estado com post_content e current_offer já preenchidos
+
+    Returns:
+        Estado final após monitoramento
+    """
+    logger.info(f"Iniciando monitoramento {initial_state['execution_id']}")
+
+    app = build_monitor_graph()
+    final_state = app.invoke(initial_state)
+
+    logger.info(f"Monitoramento {initial_state['execution_id']} finalizado")
     logger.info(f"Status final: {final_state.get('step')}")
 
     return final_state
