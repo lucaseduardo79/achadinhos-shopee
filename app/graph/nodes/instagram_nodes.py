@@ -7,7 +7,7 @@ from app.graph.state import GraphState
 from app.integrations.instagram.client import InstagramClient
 from app.services.content_generator import ContentGenerator
 from app.services.comment_processor import CommentProcessor
-from app.services.state_store import save_post, get_offer_for_post
+from app.services.state_store import save_post, get_offer_for_post, save_processed_comment, is_comment_processed
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +157,8 @@ def avaliar_comentario(state: GraphState) -> Dict[str, Any]:
 
         # Encontra o próximo comentário não processado
         for comment in comments:
+            if is_comment_processed(comment["comment_id"]):
+                continue
             if not comment.get("processed", False):
                 should_process = processor.should_process_comment(comment)
 
@@ -234,10 +236,10 @@ def enviar_dm_com_link(state: GraphState) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"[{state['execution_id']}] Erro ao enviar DM: {str(e)}")
+        logger.warning(f"[{state['execution_id']}] DM não enviada ({str(e)}). Seguindo para resposta pública.")
         return {
-            "step": "error",
-            "error": f"Erro ao enviar DM: {str(e)}"
+            "step": "dm_skipped",
+            "error": None
         }
 
 
@@ -270,8 +272,9 @@ def responder_comentario_publico(state: GraphState) -> Dict[str, Any]:
             message=reply_text
         )
 
-        # Marca o comentário como processado
+        # Marca o comentário como processado (em memória e persistido)
         comment["processed"] = True
+        save_processed_comment(comment["comment_id"])
 
         logger.info(f"[{state['execution_id']}] Comentário respondido: {comment['comment_id']}")
 

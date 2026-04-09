@@ -56,6 +56,9 @@ docker-compose.override.yml
 *.db
 *.sqlite3
 
+# Runtime state
+data/meta.json
+
 # Temporary files
 *.tmp
 temp/

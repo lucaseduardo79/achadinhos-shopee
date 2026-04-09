@@ -1,50 +1,40 @@
-version: '3.8'
-
 services:
-  achadinhos-shopee:
+  publisher:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    container_name: achadinhos-shopee
+    container_name: achadinhos-publisher
     env_file:
       - .env
     environment:
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - OPERATION_MODE=${OPERATION_MODE:-once}
+      - OPERATION_MODE=loop
+      - LOOP_INTERVAL_SECONDS=${LOOP_INTERVAL_SECONDS:-86400}
     volumes:
-      # Monta código para desenvolvimento (remover em produção)
-      - ./app:/app/app
-      # Persiste logs
       - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
     networks:
       - achadinhos-network
 
-  # Opcional: adicionar banco de dados para persistência
-  # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: achadinhos-db
-  #   environment:
-  #     POSTGRES_DB: achadinhos
-  #     POSTGRES_USER: ${DB_USER:-achadinhos}
-  #     POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
-  #   volumes:
-  #     - postgres-data:/var/lib/postgresql/data
-  #   networks:
-  #     - achadinhos-network
-  #   restart: unless-stopped
-
-  # Opcional: adicionar Redis para cache
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: achadinhos-cache
-  #   networks:
-  #     - achadinhos-network
-  #   restart: unless-stopped
+  monitor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: achadinhos-monitor
+    env_file:
+      - .env
+    environment:
+      - OPERATION_MODE=monitor_loop
+      - MONITOR_INTERVAL_SECONDS=${MONITOR_INTERVAL_SECONDS:-300}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - publisher
+    networks:
+      - achadinhos-network
 
 networks:
   achadinhos-network:
     driver: bridge
-
-# volumes:
-#   postgres-data:

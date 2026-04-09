@@ -7,6 +7,7 @@ import logging
 from app.graph.state import GraphState
 from app.integrations.shopee.client import ShopeeClient
 from app.services.offer_selector import OfferSelector
+from app.services.state_store import get_recently_published_ids
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,20 @@ def selecionar_ofertas_do_dia(state: GraphState) -> Dict[str, Any]:
             return {
                 "step": "no_offers",
                 "error": "Nenhuma oferta disponível para seleção"
+            }
+
+        # Filtra produtos já publicados nos últimos 7 dias
+        published_ids = get_recently_published_ids(days=7)
+        if published_ids:
+            before = len(raw_offers)
+            raw_offers = [o for o in raw_offers if str(o.get("itemId", "")) not in published_ids]
+            logger.info(f"[{state['execution_id']}] {before - len(raw_offers)} oferta(s) ignorada(s) por duplicata")
+
+        if not raw_offers:
+            logger.warning(f"[{state['execution_id']}] Todas as ofertas já foram publicadas recentemente")
+            return {
+                "step": "no_offers",
+                "error": "Nenhuma oferta nova disponível (todas já publicadas nos últimos 7 dias)"
             }
 
         selected = selector.select_best_offers(raw_offers, limit=1)

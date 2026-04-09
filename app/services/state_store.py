@@ -7,8 +7,8 @@ o monitoramento de comentários funcione mesmo após reinicializações.
 import json
 import logging
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, Set
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ def save_post(post_id: str, offer: Dict[str, Any]):
         "post_id": post_id,
         "published_at": datetime.now().isoformat(),
         "offer": {
+            "product_id": offer.get("product_id"),
             "name": offer.get("name"),
             "price": offer.get("price"),
             "original_price": offer.get("original_price"),
@@ -74,6 +75,79 @@ def get_offer_for_post(post_id: str) -> Optional[Dict[str, Any]]:
         if post.get("post_id") == post_id:
             return post.get("offer")
     return None
+
+
+def load_recent_posts(days: int = 7) -> list:
+    """
+    Retorna todos os posts publicados nos últimos N dias.
+    """
+    posts = _load_all()
+    cutoff = datetime.now() - timedelta(days=days)
+    recent = []
+    for post in posts:
+        try:
+            if datetime.fromisoformat(post["published_at"]) >= cutoff:
+                recent.append(post)
+        except Exception:
+            pass
+    return recent
+
+
+def get_recently_published_ids(days: int = 7) -> Set[str]:
+    """
+    Retorna os product_ids publicados nos últimos N dias.
+
+    Args:
+        days: Janela de deduplicação em dias
+
+    Returns:
+        Set de product_ids recentemente publicados
+    """
+    posts = _load_all()
+    cutoff = datetime.now() - timedelta(days=days)
+    ids = set()
+    for post in posts:
+        try:
+            published_at = datetime.fromisoformat(post["published_at"])
+            if published_at >= cutoff:
+                product_id = post.get("offer", {}).get("product_id")
+                if product_id:
+                    ids.add(str(product_id))
+        except Exception:
+            pass
+    return ids
+
+
+def save_processed_comment(comment_id: str):
+    """Registra um comentário como já respondido."""
+    data = _load_meta()
+    processed = data.get("processed_comments", [])
+    if comment_id not in processed:
+        processed.append(comment_id)
+    data["processed_comments"] = processed
+    _save_meta(data)
+
+
+def is_comment_processed(comment_id: str) -> bool:
+    """Verifica se um comentário já foi respondido."""
+    data = _load_meta()
+    return comment_id in data.get("processed_comments", [])
+
+
+def _load_meta() -> dict:
+    meta_file = STATE_FILE.parent / "meta.json"
+    if not meta_file.exists():
+        return {}
+    try:
+        return json.loads(meta_file.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_meta(data: dict):
+    meta_file = STATE_FILE.parent / "meta.json"
+    meta_file.parent.mkdir(exist_ok=True)
+    meta_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _load_all() -> list:

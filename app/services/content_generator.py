@@ -62,10 +62,16 @@ class ContentGenerator:
         Returns:
             Legenda formatada
         """
-        # Calcula economia
-        original_price = offer.get("original_price", 0)
-        current_price = offer.get("price", 0)
-        savings = original_price - current_price if original_price else 0
+        # Calcula preços — priceMin/priceMax da Shopee são variantes, não original/atual.
+        # Recalcula o preço original a partir do desconto quando são iguais.
+        current_price = offer.get("price", 0) or 0
+        original_price = offer.get("original_price", 0) or 0
+        discount = offer.get("discount_percentage", 0) or 0
+
+        if discount > 0 and current_price > 0 and (not original_price or original_price == current_price):
+            original_price = round(current_price / (1 - discount / 100), 2)
+
+        savings = round(original_price - current_price, 2) if original_price > current_price else 0
 
         # Emoji baseado na categoria (pode ser expandido)
         emoji = self._get_category_emoji(offer.get("category", ""))

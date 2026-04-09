@@ -29,9 +29,10 @@ RUN pip install --upgrade pip && \
 
 # Copia o código da aplicação
 COPY app/ ./app/
+COPY scripts/ ./scripts/
 
-# Cria diretório para logs
-RUN mkdir -p /app/logs
+# Cria diretórios necessários
+RUN mkdir -p /app/logs /app/data
 
 # Usuário não-root para segurança
 RUN useradd -m -u 1000 appuser && \

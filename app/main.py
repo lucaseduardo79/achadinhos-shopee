@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from app.utils.logger import setup_logging
 from app.graph.graph import run_workflow, run_monitor_workflow
 from app.graph.state import create_initial_state, GraphState
-from app.services.state_store import load_last_post
+from app.services.state_store import load_last_post, load_recent_posts
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +43,15 @@ def main():
         run_continuous_loop(interval)
 
     elif mode == "monitor":
-        # Monitora comentários do último post publicado sem publicar um novo
-        logger.info("Modo: Monitoramento")
+        # Monitora comentários uma única vez
+        logger.info("Modo: Monitoramento único")
         run_monitor_execution()
+
+    elif mode == "monitor_loop":
+        # Monitora comentários continuamente em intervalo curto
+        logger.info("Modo: Monitoramento contínuo")
+        interval = int(os.getenv("MONITOR_INTERVAL_SECONDS", "300"))
+        run_monitor_loop(interval)
 
     elif mode == "scheduled":
         # Execução agendada (requer biblioteca de scheduling)
@@ -108,21 +114,78 @@ def run_monitor_execution():
         logger.info("Monitoramento finalizado com sucesso!")
 
 
-def run_continuous_loop(interval_seconds: int):
+def run_monitor_loop(interval_seconds: int):
     """
-    Executa o workflow em loop contínuo.
+    Monitora comentários de todos os posts recentes em loop contínuo.
 
     Args:
-        interval_seconds: Intervalo entre execuções em segundos
+        interval_seconds: Intervalo entre verificações (padrão: 300s = 5min)
     """
-    logger.info(f"Iniciando loop com intervalo de {interval_seconds}s")
+    logger.info(f"Monitoramento contínuo a cada {interval_seconds}s")
+
+    while True:
+        recent_posts = load_recent_posts(days=7)
+        if not recent_posts:
+            logger.info("Nenhum post publicado ainda. Aguardando...")
+            time.sleep(interval_seconds)
+            continue
+
+        for post in recent_posts:
+            try:
+                post_id = post["post_id"]
+                offer = post["offer"]
+                logger.info(f"Verificando comentários: post {post_id}")
+
+                initial_state = create_initial_state()
+                initial_state["current_offer"] = offer
+                initial_state["post_content"] = {
+                    "post_id": post_id,
+                    "image_url": offer.get("image_url", ""),
+                    "caption": "",
+                    "published_at": post.get("published_at"),
+                    "product_link": offer.get("affiliate_link") or offer.get("product_url", ""),
+                }
+                initial_state["step"] = "post_published"
+
+                run_monitor_workflow(initial_state)
+
+            except Exception as e:
+                logger.exception(f"Erro ao monitorar post {post.get('post_id')}: {e}")
+
+        time.sleep(interval_seconds)
+
+
+def run_continuous_loop(interval_seconds: int):
+    """
+    Executa o workflow em loop contínuo, respeitando o intervalo desde a última publicação.
+
+    Args:
+        interval_seconds: Intervalo mínimo entre publicações em segundos
+    """
+    logger.info(f"Iniciando loop com intervalo de {interval_seconds}s entre publicações")
 
     iteration = 0
 
     while True:
+        # Verifica se já passou tempo suficiente desde a última publicação
+        last = load_last_post()
+        if last:
+            from datetime import datetime
+            last_published = datetime.fromisoformat(last["published_at"])
+            elapsed = (datetime.now() - last_published).total_seconds()
+            remaining = interval_seconds - elapsed
+
+            if remaining > 0:
+                logger.info(
+                    f"Última publicação há {int(elapsed/3600)}h{int((elapsed%3600)/60)}m. "
+                    f"Próxima em {int(remaining/3600)}h{int((remaining%3600)/60)}m."
+                )
+                time.sleep(min(remaining, 3600))  # Acorda no máximo a cada 1h para checar
+                continue
+
         iteration += 1
         logger.info(f"\n{'=' * 60}")
-        logger.info(f"Iteração #{iteration}")
+        logger.info(f"Publicação #{iteration}")
         logger.info(f"{'=' * 60}\n")
 
         try:
@@ -130,15 +193,14 @@ def run_continuous_loop(interval_seconds: int):
             final_state = run_workflow(initial_state)
 
             if final_state.get("error"):
-                logger.error(f"Execução #{iteration} finalizada com erro")
+                logger.error(f"Publicação #{iteration} finalizada com erro")
             else:
-                logger.info(f"Execução #{iteration} finalizada com sucesso")
+                logger.info(f"Publicação #{iteration} finalizada com sucesso")
 
         except Exception as e:
-            logger.exception(f"Erro na iteração #{iteration}: {str(e)}")
+            logger.exception(f"Erro na publicação #{iteration}: {str(e)}")
 
-        # Aguarda próximo ciclo
-        logger.info(f"\nAguardando {interval_seconds}s até próxima execução...")
+        logger.info(f"Aguardando {interval_seconds}s até próxima publicação...")
         time.sleep(interval_seconds)
 
 

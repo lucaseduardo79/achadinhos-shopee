@@ -200,6 +200,14 @@ class InstagramClient:
             }
 
             response = self._request("get", endpoint, params=params)
+
+            # Post inaccessível (publicado com outro token/app) — ignora sem crash
+            if response.status_code == 400:
+                body = response.json()
+                msg = body.get("error", {}).get("message", "")
+                logger.warning(f"Post {post_id} inacessível (400): {msg}. Ignorando.")
+                return []
+
             response.raise_for_status()
 
             comments_data = response.json().get("data", [])
@@ -275,14 +283,14 @@ class InstagramClient:
             # IMPORTANTE: Esta implementação requer Instagram Messaging API
             # e permissões específicas aprovadas pela Meta
 
-            endpoint = f"{self.base_url}/me/messages"
+            endpoint = f"https://graph.instagram.com/{self.api_version}/me/messages"
             payload = {
                 "recipient": {"id": user_id},
                 "message": {"text": message},
-                "access_token": self.access_token
             }
+            headers = {"Authorization": f"Bearer {self.access_token}"}
 
-            response = self._request("post", endpoint, json=payload)
+            response = self._request("post", endpoint, json=payload, headers=headers)
             response.raise_for_status()
 
             message_id = response.json().get("message_id")

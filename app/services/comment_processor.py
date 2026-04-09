@@ -58,13 +58,6 @@ class CommentProcessor:
             )
             return False
 
-        # Verifica se o comentário demonstra interesse
-        if not self._has_interest_keywords(comment["text"]):
-            logger.debug(
-                f"Comentário '{comment['text']}' não demonstra interesse claro"
-            )
-            return False
-
         # Verifica se não é spam
         if self._is_spam(comment["text"]):
             logger.warning(f"Comentário identificado como spam: {comment['text']}")
