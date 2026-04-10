@@ -35,6 +35,9 @@ pydantic>=2.0.0
 # Redis (descomentar se usar cache)
 # redis>=5.0.0
 
+# DuckDB - banco de dados embarcado para histórico de interações
+duckdb>=0.10.0
+
 # =============================================================================
 # OPTIONAL: Observability & Monitoring
 # =============================================================================

@@ -8,6 +8,7 @@ from app.integrations.instagram.client import InstagramClient
 from app.services.content_generator import ContentGenerator
 from app.services.comment_processor import CommentProcessor
 from app.services.state_store import save_post, get_offer_for_post, save_processed_comment, is_comment_processed
+from app.services.interaction_store import save_interaction
 
 logger = logging.getLogger(__name__)
 
@@ -275,6 +276,19 @@ def responder_comentario_publico(state: GraphState) -> Dict[str, Any]:
         # Marca o comentário como processado (em memória e persistido)
         comment["processed"] = True
         save_processed_comment(comment["comment_id"])
+
+        # Persiste a interação no DuckDB
+        offer = state.get("current_offer") or {}
+        post_id = (state.get("post_content") or {}).get("post_id", "")
+        product_link = offer.get("affiliate_link") or offer.get("product_url", "")
+        save_interaction(
+            comment_id=comment["comment_id"],
+            username=comment["username"],
+            product_link=product_link,
+            user_id=comment.get("user_id", ""),
+            product_name=offer.get("name", ""),
+            post_id=post_id,
+        )
 
         logger.info(f"[{state['execution_id']}] Comentário respondido: {comment['comment_id']}")
 
