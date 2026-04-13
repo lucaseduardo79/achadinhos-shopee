@@ -68,10 +68,14 @@ def selecionar_ofertas_do_dia(state: GraphState) -> Dict[str, Any]:
     logger.info(f"[{state['execution_id']}] Selecionando ofertas...")
 
     try:
+        excluded_raw = os.getenv("SHOPEE_EXCLUDE_KEYWORDS", "")
+        excluded_keywords = [kw.strip() for kw in excluded_raw.split(",") if kw.strip()]
+
         selector = OfferSelector(
             min_rating=float(os.getenv("MIN_RATING", 4.0)),
             min_discount=float(os.getenv("MIN_DISCOUNT", 30.0)),
             min_commission=float(os.getenv("MIN_COMMISSION", 5.0)),
+            excluded_name_keywords=excluded_keywords,
         )
         raw_offers = state.get("raw_offers", [])
 

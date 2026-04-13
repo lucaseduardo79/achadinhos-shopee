@@ -18,7 +18,8 @@ class OfferSelector:
         min_rating: float = 4.0,
         min_discount: float = 30.0,
         min_commission: float = 5.0,
-        allowed_categories: List[str] = None
+        allowed_categories: List[str] = None,
+        excluded_name_keywords: List[str] = None
     ):
         """
         Args:
@@ -26,11 +27,13 @@ class OfferSelector:
             min_discount: Desconto mínimo em porcentagem
             min_commission: Comissão mínima em porcentagem
             allowed_categories: Não suportado pela API de Afiliados (ignorado)
+            excluded_name_keywords: Palavras no nome do produto que descartam a oferta
         """
         self.min_rating = min_rating
         self.min_discount = min_discount
         self.min_commission = min_commission
         self.allowed_categories = allowed_categories
+        self.excluded_name_keywords = [kw.lower() for kw in (excluded_name_keywords or [])]
 
         if allowed_categories:
             logger.warning(
@@ -92,6 +95,14 @@ class OfferSelector:
         commission = float(offer.get("commissionRate") or 0)
         if commission < self.min_commission:
             return False
+
+        # Filtra por palavras bloqueadas no nome do produto
+        if self.excluded_name_keywords:
+            name_lower = (offer.get("productName") or "").lower()
+            for kw in self.excluded_name_keywords:
+                if kw in name_lower:
+                    logger.debug(f"Oferta descartada por palavra bloqueada '{kw}': {offer.get('productName')}")
+                    return False
 
         return True
 
